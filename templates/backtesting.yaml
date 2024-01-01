@@ -1,0 +1,87 @@
+{{- if .Values.backtesting.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backtesting-{{ .Values.fullname }}-{{ now | unixEpoch }}
+spec:
+  template:
+    spec:
+      {{- if .Values.backtesting.download_data }}
+      initContainers:
+      - name: download-data
+        image: {{ .Values.image.base }}:{{ .Values.image.tag }}
+        command:
+        - freqtrade
+        args:
+        - download-data
+        #- --dl-trades
+        - --pairs
+{{ .Values.config.exchange.pair_whitelist | toYaml | indent 8 }}
+        - --days
+        - "{{ .Values.backtesting.days }}"
+        - --timeframes
+        - {{ .Values.backtesting.timeframes }}
+        - --datadir
+        - /data/{{ .Values.config.exchange.name }}
+        - --config
+        - /freqtrade/config/config.json
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /freqtrade/config
+          name: config
+      {{- end }}
+      containers:
+      - name: backtesting
+        image: {{ .Values.image.base }}:{{ .Values.image.tag }}
+        command:
+        - freqtrade
+        args:
+        - backtesting
+        - --config
+        - /freqtrade/config/config.json
+        - --datadir
+        - /data/{{ .Values.config.exchange.name }}
+        - --breakdown
+        - day
+        - --strategy-list
+        - {{ .Values.backtesting.strategy_list }}
+        {{- if .Values.backtesting.timerange }}
+        - --timerange
+        - {{ .Values.backtesting.timerange }}
+        {{- end }}
+        {{- if .Values.backtesting.fee }}
+        - --fee
+        - {{ .Values.backtesting.fee | quote }}
+        {{- end }}
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /freqtrade/config
+          name: config
+        - mountPath: /freqtrade/user_data/strategies
+          name: strategies
+      restartPolicy: Never
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: backtesting-data-{{ .Values.fullname }}
+      - name: config
+        configMap:
+          name: freqtrade-config-{{ .Values.fullname }}
+      - name: strategies
+        configMap:
+          name: freqtrade-strategies-{{ .Values.fullname }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backtesting-data-{{ .Values.fullname }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.backtesting.pvc_size }}
+{{- end }}

@@ -1,0 +1,26 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/tls-acme: "true"
+  name: {{ .Values.fullname }}
+spec:
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      {{- if (and .Values.bot.enabled .Values.config.api_server.enabled) }}
+      - backend:
+          service:
+            name: {{ .Values.fullname }}
+            port:
+              number: 8080
+        path: /
+        pathType: ImplementationSpecific
+      {{- end }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.host }}
+    secretName: {{ .Values.ingress.host | replace "." "-" }}-tls
+{{- end }}

@@ -1,0 +1,64 @@
+{{- if .Values.bot.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.fullname }}
+spec:
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Values.fullname }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.fullname }}
+      annotations:
+        rollme: {{ randAlphaNum 5 | quote }}
+    spec:
+      containers:
+      - name: freqtrade
+        image: {{ .Values.image.base }}:{{ .Values.image.tag }}
+        imagePullPolicy: IfNotPresent
+        command:
+        - freqtrade
+        args:
+        - trade
+        - --config
+        - /freqtrade/config/config.json
+        - --strategy
+        - {{ .Values.bot.strategy_name }}
+        - --db-url
+        - sqlite:////sqlite/tradesv3.sqlite
+        volumeMounts:
+        - mountPath: /freqtrade/config
+          name: config
+        - mountPath: /freqtrade/user_data/strategies
+          name: strategies
+        - mountPath: /sqlite
+          name: sqlite
+        ports:
+        - name: api
+          containerPort: 8080
+      volumes:
+      - name: config
+        configMap:
+          name: freqtrade-config-{{ .Values.fullname }}
+      - name: strategies
+        configMap:
+          name: freqtrade-strategies-{{ .Values.fullname }}
+      - name: sqlite
+        persistentVolumeClaim:
+          claimName: freqtrade-sqlite-{{ .Values.fullname }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: freqtrade-sqlite-{{ .Values.fullname }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.bot.pvc_size }}
+{{- end }}
